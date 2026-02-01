@@ -302,7 +302,7 @@ export default function AddEntry() {
           onClick={() => setShowDatePicker(false)}
         >
           <div 
-            className="bg-card/90 backdrop-blur-sm rounded-3xl p-8 w-full max-w-md shadow-2xl border border-primary/15 animate-scaleIn"
+            className="bg-card/90 backdrop-blur-sm rounded-2xl md:rounded-3xl p-4 md:p-8 w-full max-w-sm md:max-w-md shadow-2xl border border-primary/15 animate-scaleIn"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
@@ -391,9 +391,9 @@ export default function AddEntry() {
       )}
 
       {/* Top Bar with Back Button and Date */}
-      <div className="w-full pt-12 pb-8 px-6">
+      <div className="w-full pt-8 md:pt-12 pb-6 md:pb-8 px-4 md:px-6">
         <div className="max-w-6xl mx-auto w-full">
-          <div className="mb-8 flex items-center justify-between">
+          <div className="mb-6 md:mb-8 flex items-center justify-between">
             <Link
               to="/"
               className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
@@ -481,8 +481,8 @@ export default function AddEntry() {
         {/* Main Content Area */}
         <div className="flex-1 overflow-y-auto pb-32 relative">
           {/* Fixed AI Companion Dialog - stays visible during scroll */}
-          <div className="fixed top-46 left-12 z-10 animate-fadeIn">
-            <div className="flex items-start gap-4 max-w-md">
+          <div className="hidden md:block fixed top-46 left-6 md:left-12 z-10 animate-fadeIn">
+            <div className="flex items-start gap-3 md:gap-4 max-w-xs md:max-w-md">
               {/* Mascot Avatar */}
               <div className="flex-shrink-0">
                 <JournalMascot size={56} />
@@ -503,7 +503,7 @@ export default function AddEntry() {
             </div>
           </div>
 
-          <div className={`w-full py-8 transition-all duration-300 ${isToolsPanelOpen ? 'pl-12 pr-24' : 'px-12'}`}>
+          <div className={`w-full py-6 md:py-8 transition-all duration-300 ${isToolsPanelOpen ? 'pl-6 md:pl-12 pr-16 md:pr-24' : 'px-4 md:px-12'}`}>
             {/* Rich Text Editor - Notion-like Experience */}
             <div className="min-h-screen">
               <EditorContent editor={editor} />

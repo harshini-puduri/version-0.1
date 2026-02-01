@@ -120,8 +120,8 @@ export default function Home() {
       {/* Content Wrapper */}
       <div className="flex flex-col items-center gap-12 w-full max-w-xl">
         {/* Header section */}
-        <div className="text-center space-y-2 pt-36">
-          <h1 className="text-4xl text-foreground/90">
+        <div className="text-center space-y-2 pt-24 md:pt-36">
+          <h1 className="text-3xl md:text-4xl text-foreground/90">
             Welcome back, {username}
           </h1>
           <p className="text-muted-foreground text-base">
@@ -133,12 +133,12 @@ export default function Home() {
         <div className="w-full space-y-8">
           {/* Mascot */}
           <div className="flex justify-center">
-          <JournalMascotExcited size={192} />
+          <JournalMascotExcited size={window.innerWidth < 768 ? 144 : 192} />
           </div>
 
           {/* AI Message Card */}
-          <div className="bg-card rounded-3xl p-8 shadow-sm border border-primary/8 hover:shadow-md hover:border-primary/12 transition-all duration-300">
-            <p className="text-foreground/90 text-lg leading-relaxed">
+          <div className="bg-card rounded-3xl p-6 md:p-8 shadow-sm border border-primary/8 hover:shadow-md hover:border-primary/12 transition-all duration-300">
+            <p className="text-foreground/90 text-base md:text-lg leading-relaxed">
               {aiMessage}
             </p>
           </div>

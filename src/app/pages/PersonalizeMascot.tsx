@@ -27,7 +27,7 @@ export default function PersonalizeMascot() {
   };
 
   return (
-    <div className="flex-1 flex flex-col px-6 pb-24 pt-8 max-w-3xl mx-auto w-full">
+    <div className="flex-1 flex flex-col px-4 md:px-6 pb-24 pt-6 md:pt-8 max-w-3xl mx-auto w-full">
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
         <Link

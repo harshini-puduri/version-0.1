@@ -6,7 +6,7 @@ export default function Navigation() {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-2xl border-t border-primary/5">
-      <nav className="max-w-lg mx-auto px-12 py-4">
+      <nav className="max-w-lg mx-auto px-6 md:px-12 py-3 md:py-4">
         <div className="flex items-center justify-between">
           {/* History */}
           <Link

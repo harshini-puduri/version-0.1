@@ -376,8 +376,8 @@ export default function History() {
 
         {/* Carousel section */}
         <div className="relative w-full mb-8 group">
-          <div className="flex justify-center items-center py-12">
-            <div className="w-full max-w-4xl px-16 relative h-96">
+          <div className="flex justify-center items-center py-8 md:py-12">
+            <div className="w-full max-w-4xl px-4 md:px-16 relative h-80 md:h-96">
               {/* Cards container with smooth transitions */}
               <div className="flex justify-center items-center h-full relative">
                 {memories.map((memory, index) => {
@@ -394,16 +394,16 @@ export default function History() {
                     positionClass = "absolute opacity-100 scale-110 pointer-events-auto z-30";
                     zIndex = 30;
                   } else if (isPrev) {
-                    positionClass = "absolute opacity-40 scale-85 pointer-events-none z-10";
+                    positionClass = "absolute opacity-40 scale-75 md:scale-85 pointer-events-none z-10";
                     zIndex = 10;
                   } else if (isNext) {
-                    positionClass = "absolute opacity-40 scale-85 pointer-events-none z-10";
+                    positionClass = "absolute opacity-40 scale-75 md:scale-85 pointer-events-none z-10";
                     zIndex = 10;
                   } else if (isPrevPrev) {
-                    positionClass = "absolute opacity-20 scale-70 pointer-events-none z-5";
+                    positionClass = "absolute opacity-20 scale-60 md:scale-70 pointer-events-none z-5";
                     zIndex = 5;
                   } else if (isNextNext) {
-                    positionClass = "absolute opacity-20 scale-70 pointer-events-none z-5";
+                    positionClass = "absolute opacity-20 scale-60 md:scale-70 pointer-events-none z-5";
                     zIndex = 5;
                   }
 
@@ -415,13 +415,13 @@ export default function History() {
                       style={{
                         zIndex,
                         top: isActive ? "48%" : isPrev || isNext ? "52%" : isPrevPrev || isNextNext ? "56%" : "50%",
-                        left: isActive ? "50%" : isPrev ? "25%" : isNext ? "75%" : isPrevPrev ? "5%" : isNextNext ? "95%" : "50%",
+                        left: isActive ? "50%" : isPrev ? "20%" : isNext ? "80%" : isPrevPrev ? "2%" : isNextNext ? "98%" : "50%",
                         transform: "translate(-50%, -50%)",
                         willChange: "transform",
                       }}
                     >
                       <div
-                        className="w-80 h-96 bg-card rounded-3xl overflow-hidden shadow-xl border border-primary/10 cursor-pointer hover:shadow-2xl transition-shadow duration-300"
+                        className="w-64 h-80 md:w-80 md:h-96 bg-card rounded-3xl overflow-hidden shadow-xl border border-primary/10 cursor-pointer hover:shadow-2xl transition-shadow duration-300"
                         onClick={() => {
                           if (isActive) setExpandedCard(memory.id);
                         }}
@@ -442,7 +442,7 @@ export default function History() {
               {/* Navigation arrows */}
               <button
                 onClick={handlePrevious}
-                className="absolute left-0 top-1/2 -translate-y-1/2 p-3 rounded-full bg-primary/20 hover:bg-primary/30 backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100 hover:scale-110 shadow-lg z-40"
+                className="absolute -left-2 md:left-0 top-1/2 -translate-y-1/2 p-2 md:p-3 rounded-full bg-primary/20 hover:bg-primary/30 backdrop-blur-sm transition-all opacity-70 md:opacity-0 group-hover:opacity-100 hover:scale-110 shadow-lg z-40"
                 aria-label="Previous"
                 type="button"
               >
@@ -451,7 +451,7 @@ export default function History() {
 
               <button
                 onClick={handleNext}
-                className="absolute right-0 top-1/2 -translate-y-1/2 p-3 rounded-full bg-primary/20 hover:bg-primary/30 backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100 hover:scale-110 shadow-lg z-40"
+                className="absolute -right-2 md:right-0 top-1/2 -translate-y-1/2 p-2 md:p-3 rounded-full bg-primary/20 hover:bg-primary/30 backdrop-blur-sm transition-all opacity-70 md:opacity-0 group-hover:opacity-100 hover:scale-110 shadow-lg z-40"
                 aria-label="Next"
                 type="button"
               >
@@ -748,7 +748,7 @@ export default function History() {
                           </button>
                           
                           <button
-                            onClick={handleChatMore}
+                            onClick={() => navigate('/explore')}
                             className="px-6 py-2.5 bg-gradient-to-r from-primary/20 to-primary/15 hover:from-primary/30 hover:to-primary/25 border border-primary/30 rounded-full text-primary transition-all hover:scale-105 hover:shadow-lg flex items-center gap-2"
                             type="button"
                           >

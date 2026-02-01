@@ -26,7 +26,7 @@ export default function Explore() {
   ]);
   const [inputValue, setInputValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
-  const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
+  const [recognition, setRecognition] = useState<any>(null);
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
   const [isGoalsExpanded, setIsGoalsExpanded] = useState(true);
   const [showToast, setShowToast] = useState(false);
@@ -151,9 +151,9 @@ export default function Explore() {
   };
 
   return (
-    <div className="flex-1 flex flex-col px-6 pb-32 pt-12 max-w-4xl mx-auto w-full">
+    <div className="flex-1 flex flex-col px-4 md:px-6 pb-32 pt-8 md:pt-12 max-w-4xl mx-auto w-full">
       {/* Back button */}
-      <div className="w-full mb-8">
+      <div className="w-full mb-6 md:mb-8">
         <Link
           to="/"
           className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
@@ -164,17 +164,17 @@ export default function Explore() {
       </div>
 
       {/* Header */}
-      <div className="text-center mb-12 space-y-3">
-        <h1 className="text-4xl text-foreground/90">Chat with Your Guide</h1>
-        <p className="text-muted-foreground text-lg italic">
+      <div className="text-center mb-8 md:mb-12 space-y-2 md:space-y-3">
+        <h1 className="text-3xl md:text-4xl text-foreground/90">Chat with Your Guide</h1>
+        <p className="text-muted-foreground text-base md:text-lg italic">
           Ask anything, share your thoughts
         </p>
       </div>
 
       {/* Chat Container */}
-      <div className="flex-1 flex flex-col bg-gradient-to-b from-card/30 to-card/50 backdrop-blur-xl rounded-[32px] overflow-hidden shadow-2xl shadow-primary/5">
+      <div className="flex-1 flex flex-col bg-gradient-to-b from-card/30 to-card/50 backdrop-blur-xl rounded-3xl md:rounded-[32px] overflow-hidden shadow-2xl shadow-primary/5">
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-8 md:p-12">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-12">
           {!hasUserInteracted ? (
             // Initial Full Curated Welcome Screen
             <div className="flex flex-col items-center justify-center min-h-full space-y-10 animate-in fade-in duration-1000">
@@ -337,19 +337,19 @@ export default function Explore() {
         </div>
 
         {/* Input Area */}
-        <div className="bg-card/70 backdrop-blur-xl p-8 border-t border-primary/5">
-          <div className="flex items-center gap-4">
+        <div className="bg-card/70 backdrop-blur-xl p-4 md:p-6 lg:p-8 border-t border-primary/5">
+          <div className="flex items-center gap-2 md:gap-4">
             <textarea
               ref={inputRef}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type your message..."
-              className="flex-1 bg-background/40 backdrop-blur-sm rounded-[24px] px-6 py-4 text-foreground/85 placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-background/60 transition-all duration-300 resize-none min-h-[56px] max-h-[200px] leading-relaxed shadow-inner"
+              className="flex-1 bg-background/40 backdrop-blur-sm rounded-2xl md:rounded-[24px] px-4 py-3 md:px-6 md:py-4 text-sm md:text-base text-foreground/85 placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-background/60 transition-all duration-300 resize-none min-h-[48px] md:min-h-[56px] max-h-[200px] leading-relaxed shadow-inner"
               rows={1}
               style={{
                 height: "auto",
-                minHeight: "56px",
+                minHeight: window.innerWidth < 768 ? "48px" : "56px",
               }}
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement;
@@ -360,13 +360,13 @@ export default function Explore() {
             <button
               onClick={handleSendMessage}
               disabled={!inputValue.trim()}
-              className="flex-shrink-0 h-[56px] w-[56px] flex items-center justify-center bg-gradient-to-br from-primary/15 to-primary/10 hover:from-primary/25 hover:to-primary/15 rounded-full transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl disabled:hover:scale-100"
+              className="flex-shrink-0 h-[48px] w-[48px] md:h-[56px] md:w-[56px] flex items-center justify-center bg-gradient-to-br from-primary/15 to-primary/10 hover:from-primary/25 hover:to-primary/15 rounded-full transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl disabled:hover:scale-100"
             >
-              <Send className="w-5 h-5 text-primary/80" />
+              <Send className="w-4 h-4 md:w-5 md:h-5 text-primary/80" />
             </button>
             <button
               onClick={isRecording ? handleStopRecording : handleStartRecording}
-              className={`flex-shrink-0 h-[56px] w-[56px] flex items-center justify-center rounded-full transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl ${
+              className={`flex-shrink-0 h-[48px] w-[48px] md:h-[56px] md:w-[56px] flex items-center justify-center rounded-full transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl ${
                 isRecording
                   ? "bg-gradient-to-br from-red-500/20 to-red-400/15 animate-pulse"
                   : "bg-gradient-to-br from-primary/15 to-primary/10 hover:from-primary/25 hover:to-primary/15"
