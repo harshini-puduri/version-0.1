@@ -1,7 +1,7 @@
 
   # Journaling App
 
-  This is a code bundle for AI Journaling App Interface. Development Ongoi
+  This is a code bundle for AI Journaling App Interface. 
 
   ## Running the code
 
