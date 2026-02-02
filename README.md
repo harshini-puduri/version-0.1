@@ -1,7 +1,11 @@
 
-  # AI Journaling App
+  # Journaling App
 
-  This is a code bundle for AI Journaling App Interface. Development Ongoing
+  This is a code bundle for AI Journaling App Interface. Development Ongoi
 
+  ## Running the code
 
+  Run `npm i` to install the dependencies.
+
+  Run `npm run dev` to start the development server.
   

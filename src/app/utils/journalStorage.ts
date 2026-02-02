@@ -1,5 +1,12 @@
 // Shared journal storage utilities
 
+export interface ImageMetadata {
+  s3_key: string;
+  url: string;
+  rag_processed?: boolean;
+  rag_description?: string;
+}
+
 export interface JournalEntry {
   id: string;
   title: string;
@@ -8,6 +15,7 @@ export interface JournalEntry {
   preview: string;
   mood?: "calm" | "happy" | "thoughtful" | "stressed";
   wordCount: number;
+  images?: ImageMetadata[];
 }
 
 const JOURNAL_ENTRIES_KEY = "journal-entries";

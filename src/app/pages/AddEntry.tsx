@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { 
   ArrowLeft, 
@@ -20,9 +20,12 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
-import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
+import UnderlineExtension from '@tiptap/extension-underline';
+import type { Editor as TiptapEditor } from '@tiptap/core';
 import { ResizableImage } from "@/app/components/ResizableImage";
-import { saveEntry, getEntryByDate, generateTitle, generatePreview, countWords } from "@/app/utils/journalStorage";
+import { generateTitle, generatePreview, countWords } from "@/app/utils/journalStorage";
+import { journalApi } from "@/app/utils/journalApi";
+import { s3Upload, type ImageMetadata } from "@/services/s3Upload";
 import { JournalMascot } from "@/app/components/JournalMascot";
 import { useVoiceRecording } from "@/app/hooks/useVoiceRecording";
 import { Toast } from "@/app/components/Toast";
@@ -30,12 +33,10 @@ import { Toast } from "@/app/components/Toast";
 export default function AddEntry() {
   const location = useLocation();
   const [isToolsPanelOpen, setIsToolsPanelOpen] = useState(true);
-  const [aiQuestionHeight, setAiQuestionHeight] = useState("auto");
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showPermissionError, setShowPermissionError] = useState(false);
   const [permissionErrorMessage, setPermissionErrorMessage] = useState("");
-  const [showMicPermissionInfo, setShowMicPermissionInfo] = useState(false);
   
   // Handle date from navigation state (when editing from AllEntries)
   const editDate = (location.state as { editDate?: Date })?.editDate;
@@ -45,15 +46,11 @@ export default function AddEntry() {
   const [hasExistingEntry, setHasExistingEntry] = useState(false);
   const [showNewEntryPrompt, setShowNewEntryPrompt] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [uploadedImages, setUploadedImages] = useState<ImageMetadata[]>([]);
+  const uploadedImageMapRef = useRef<Map<string, ImageMetadata>>(new Map());
+  const [uploadingImages, setUploadingImages] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const today = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Use currentDate for storage key instead of always today
   const todayKey = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD format
@@ -68,8 +65,6 @@ export default function AddEntry() {
   });
 
   // Mock AI chatbot question (this will be dynamic with AI integration)
-  const [aiQuestion, setAiQuestion] = useState("How did yesterday feel for you?");
-
   // HARDCODED CHATBOT MESSAGES - Easy to replace with real AI integration later
   const chatbotMessages = [
     "How did yesterday feel for you?",
@@ -80,6 +75,34 @@ export default function AddEntry() {
   // Currently showing message index
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
 
+  const syncUploadedImages = useCallback((editorInstance: TiptapEditor) => {
+    const imageUrls: string[] = [];
+
+    editorInstance.state.doc.descendants((node) => {
+      if (node.type.name === 'resizableImage' && node.attrs.src) {
+        if (!imageUrls.includes(node.attrs.src)) {
+          imageUrls.push(node.attrs.src);
+        }
+      }
+    });
+
+    setUploadedImages((prev) => {
+      const next = imageUrls.map((url) => {
+        const existing = uploadedImageMapRef.current.get(url);
+        return existing ?? { url, s3_key: '' };
+      });
+
+      if (
+        prev.length === next.length &&
+        prev.every((item, index) => item.url === next[index]?.url && item.s3_key === next[index]?.s3_key)
+      ) {
+        return prev;
+      }
+
+      return next;
+    });
+  }, []);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -89,6 +112,7 @@ export default function AddEntry() {
       }),
       TextStyle,
       Color,
+      UnderlineExtension,
     ],
     editorProps: {
       attributes: {
@@ -103,6 +127,7 @@ export default function AddEntry() {
       }
 
       setIsSaving(true);
+      syncUploadedImages(editor);
       
       saveTimeoutRef.current = setTimeout(() => {
         const content = editor.getJSON();
@@ -115,37 +140,54 @@ export default function AddEntry() {
 
   // Load saved content on mount
   useEffect(() => {
-    if (editor) {
-      const savedContent = localStorage.getItem(storageKey);
-      if (savedContent) {
-        try {
-          const content = JSON.parse(savedContent);
-          editor.commands.setContent(content);
-          setLastSaved(new Date());
-          setHasExistingEntry(true);
-        } catch (error) {
-          console.error('Failed to load saved content:', error);
-        }
-      } else {
-        // No draft, check if there's a saved entry in the journal
-        const existingEntry = getEntryByDate(currentDate);
-        if (existingEntry) {
-          editor.commands.setContent(existingEntry.content);
-          setHasExistingEntry(true);
-          setLastSaved(new Date());
+    async function loadContent() {
+      if (editor) {
+        uploadedImageMapRef.current.clear();
+        setUploadedImages([]);
+        const savedContent = localStorage.getItem(storageKey);
+        if (savedContent) {
+          try {
+            const content = JSON.parse(savedContent);
+            editor.commands.setContent(content);
+            setLastSaved(new Date());
+            setHasExistingEntry(true);
+            syncUploadedImages(editor);
+          } catch (error) {
+            console.error('Failed to load saved content:', error);
+          }
         } else {
-          setHasExistingEntry(false);
+          // No draft, check if there's a saved entry in the journal
+          try {
+            const existingEntry = await journalApi.getEntryByDate(currentDate);
+            if (existingEntry) {
+              editor.commands.setContent(existingEntry.content);
+              setHasExistingEntry(true);
+              setLastSaved(new Date());
+              const existingImages = existingEntry.images || [];
+              setUploadedImages(existingImages);
+              existingImages.forEach((image) => {
+                uploadedImageMapRef.current.set(image.url, image);
+              });
+              syncUploadedImages(editor);
+            } else {
+              setHasExistingEntry(false);
+            }
+          } catch (error) {
+            console.error('Failed to load existing entry:', error);
+            setHasExistingEntry(false);
+          }
         }
       }
     }
-  }, [editor, storageKey, currentDate]);
+    
+    loadContent();
+  }, [editor, storageKey, currentDate, syncUploadedImages]);
 
   // Save to journal entries when leaving the page or content changes significantly
   useEffect(() => {
-    const saveToJournal = () => {
+    const saveToJournal = async () => {
       if (editor && editor.getText().trim()) {
         const htmlContent = editor.getHTML();
-        const textContent = editor.getText();
         
         // Generate entry ID based on today's date
         const entryId = `entry-${todayKey}`;
@@ -153,14 +195,33 @@ export default function AddEntry() {
         const entry = {
           id: entryId,
           title: generateTitle(htmlContent),
-          date: new Date(),
+          date: new Date(currentDate),
           content: htmlContent,
           preview: generatePreview(htmlContent),
           wordCount: countWords(htmlContent),
-          // mood can be set manually later or detected via AI
+          images: uploadedImages,
         };
         
-        saveEntry(entry);
+        try {
+          // Save entry first
+          const savedEntry = await journalApi.saveEntry(entry);
+          
+          // Detect mood asynchronously (non-blocking)
+          if (htmlContent.length > 50) {
+            import('@/api/exploreApi').then(({ exploreApi }) => {
+              exploreApi.detectMood(htmlContent)
+                .then(({ mood }) => {
+                  if (mood && savedEntry.id) {
+                    // Update entry with detected mood
+                    journalApi.saveEntry({ ...savedEntry, mood } as any);
+                  }
+                })
+                .catch(err => console.log('Mood detection skipped:', err));
+            });
+          }
+        } catch (error) {
+          console.error('Failed to save entry to API:', error);
+        }
       }
     };
 
@@ -168,7 +229,7 @@ export default function AddEntry() {
     return () => {
       saveToJournal();
     };
-  }, [editor, todayKey]);
+  }, [editor, todayKey, uploadedImages]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -183,30 +244,51 @@ export default function AddEntry() {
     fileInputRef.current?.click();
   };
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && editor) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const url = e.target?.result as string;
-        const { from } = editor.state.selection;
+      setUploadingImages(true);
+      try {
+        console.log('Starting image upload:', file.name, file.type, file.size);
         
+        // Upload to S3
+        const imageMetadata = await s3Upload.uploadImage(file);
+        console.log('Image uploaded successfully:', imageMetadata);
+
+        uploadedImageMapRef.current.set(imageMetadata.url, imageMetadata);
+        setUploadedImages((prev) => {
+          if (prev.some((img) => img.url === imageMetadata.url)) {
+            return prev;
+          }
+          return [...prev, imageMetadata];
+        });
+        
+        // Add to uploaded images list
+        // Insert image into editor using the S3 URL with default width
         editor
           .chain()
           .focus()
-          .insertContentAt(from, [
+          .insertContent([
             {
               type: 'resizableImage',
-              attrs: { src: url },
+              attrs: { 
+                src: imageMetadata.url,
+                width: 400 // Default width for better initial size
+              },
             },
             {
               type: 'paragraph',
             },
           ])
-          .focus(from + 1)
           .run();
-      };
-      reader.readAsDataURL(file);
+        syncUploadedImages(editor);
+      } catch (error) {
+        console.error('Image upload failed:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        alert(`Failed to upload image: ${errorMessage}\n\nPlease check:\n1. Backend is running\n2. AWS credentials are configured\n3. S3 bucket exists\n\nCheck console for details.`);
+      } finally {
+        setUploadingImages(false);
+      }
     }
     // Reset file input
     event.target.value = '';
@@ -240,11 +322,33 @@ export default function AddEntry() {
       setHasExistingEntry(false);
       setShowNewEntryPrompt(false);
       setLastSaved(null);
+      uploadedImageMapRef.current.clear();
+      setUploadedImages([]);
     }
   };
 
-  // Handle date change (for testing)
-  const handleDateChange = (newDate: Date) => {
+  // Handle date change and save entry for new date
+  const handleDateChange = async (newDate: Date) => {
+    // Save current entry before changing date
+    if (editor && editor.getText().trim()) {
+      const htmlContent = editor.getHTML();
+      const entryId = `entry-${todayKey}`;
+      const entry = {
+        id: entryId,
+        title: generateTitle(htmlContent),
+        date: new Date(currentDate),
+        content: htmlContent,
+        preview: generatePreview(htmlContent),
+        wordCount: countWords(htmlContent),
+        images: uploadedImages,
+      };
+      try {
+        await journalApi.saveEntry(entry);
+        setLastSaved(new Date());
+      } catch (error) {
+        console.error('Failed to save entry before date change:', error);
+      }
+    }
     setCurrentDate(newDate);
     setShowDatePicker(false);
   };
@@ -588,8 +692,13 @@ export default function AddEntry() {
               <div className="flex flex-col gap-2 w-full items-center">
                 <button
                   onClick={addImage}
-                  className="p-3 rounded-xl text-muted-foreground hover:bg-background/60 hover:text-foreground transition-all"
-                  title="Add image"
+                  disabled={uploadingImages}
+                  className={`p-3 rounded-xl transition-all ${
+                    uploadingImages 
+                      ? 'bg-primary/10 text-primary/60 cursor-wait' 
+                      : 'text-muted-foreground hover:bg-background/60 hover:text-foreground'
+                  }`}
+                  title={uploadingImages ? "Uploading..." : "Add image"}
                   type="button"
                 >
                   <ImageIcon className="w-5 h-5" />
@@ -606,6 +715,12 @@ export default function AddEntry() {
                 >
                   <Mic className="w-5 h-5" />
                 </button>
+                {isRecording && (
+                  <div className="flex items-center gap-2 mt-2 animate-pulse">
+                    <span className="w-2 h-2 bg-red-500 rounded-full" />
+                    <span className="text-xs text-red-500">Recording… Speak now!</span>
+                  </div>
+                )}
                 <button
                   className="p-3 rounded-xl text-muted-foreground hover:bg-background/60 hover:text-foreground transition-all"
                   title="Attach file"
@@ -746,6 +861,16 @@ export default function AddEntry() {
           text-decoration: underline;
         }
       `}</style>
+
+      {/* Upload Loading Overlay */}
+      {uploadingImages && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center min-h-screen">
+          <div className="bg-card/95 backdrop-blur-sm rounded-2xl p-8 shadow-xl border border-primary/20 flex flex-col items-center gap-4 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-40">
+            <div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+            <p className="text-foreground/80 font-medium">Uploading image...</p>
+          </div>
+        </div>
+      )}
 
       {/* Permission Error Toast */}
       {showPermissionError && (

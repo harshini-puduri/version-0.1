@@ -1,16 +1,36 @@
-import { useState } from "react";
-import { ArrowLeft, Calendar, Clock, Search, Filter, Trash2, Edit3 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ArrowLeft, Calendar, Clock, Search, Filter, Trash2, Edit3, Image as ImageIcon } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { getAllEntries, JournalEntry, deleteEntry } from "@/app/utils/journalStorage";
+import { JournalEntry } from "@/app/utils/journalStorage";
+import { journalApi } from "@/app/utils/journalApi";
 
 export default function AllEntries() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMood, setFilterMood] = useState<string>("all");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Get real journal entries from localStorage
-  const entries = getAllEntries();
+  // Load entries from API
+  useEffect(() => {
+    loadEntries();
+  }, []);
+
+  async function loadEntries() {
+    try {
+      setLoading(true);
+      const data = await journalApi.getAllEntries();
+      setEntries(data);
+      setError(null);
+    } catch (err) {
+      setError('Failed to load entries');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const moodColors = {
     calm: "from-blue-500/20 to-blue-600/10",
@@ -33,17 +53,49 @@ export default function AllEntries() {
     return matchesSearch && matchesMood;
   });
 
-  const handleDeleteEntry = (id: string) => {
-    deleteEntry(id);
-    setDeleteConfirm(null);
-    // Force re-render by triggering navigation
-    window.location.reload();
+  const handleDeleteEntry = async (id: string) => {
+    try {
+      await journalApi.deleteEntry(id);
+      setDeleteConfirm(null);
+      // Reload entries after delete
+      await loadEntries();
+    } catch (err) {
+      console.error('Failed to delete entry:', err);
+      alert('Failed to delete entry. Please try again.');
+    }
   };
 
   const handleEditEntry = (entryDate: Date) => {
     // Navigate to AddEntry with the date as state
     navigate("/add", { state: { editDate: entryDate } });
   };
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full mx-auto mb-4" />
+          <p className="text-muted-foreground/70">Loading your entries...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-500 mb-4">{error}</p>
+          <button
+            onClick={loadEntries}
+            className="px-4 py-2 bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col px-4 md:px-6 pb-24 pt-6 md:pt-8 max-w-6xl mx-auto w-full">
@@ -140,6 +192,12 @@ export default function AllEntries() {
                       <Clock className="w-3.5 h-3.5" />
                       <span>{entry.wordCount} words</span>
                     </div>
+                    {entry.images && entry.images.length > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        <span>{entry.images.length} image{entry.images.length > 1 ? 's' : ''}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 

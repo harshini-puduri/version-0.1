@@ -1,16 +1,94 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowLeft, Shield, Lock, Eye, EyeOff, Trash2, Download, Key, AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
-import { deleteAllEntries, getAllEntries } from "@/app/utils/journalStorage";
+import { getAllEntries } from "@/app/utils/journalStorage";
+import { journalApi } from "@/app/utils/journalApi";
+import { settingsApi, type PrivacySettings as PrivacySettingsType } from "@/services/settingsApi";
 
 export default function PrivacySettings() {
   // Privacy settings state
-  const [biometricLock, setBiometricLock] = useState(true);
-  const [autoLock, setAutoLock] = useState(true);
-  const [lockTimeout, setLockTimeout] = useState("5");
-  const [cloudBackup, setCloudBackup] = useState(false);
-  const [hideOnScreenshots, setHideOnScreenshots] = useState(true);
+  const [settings, setSettings] = useState<PrivacySettingsType>({
+    biometric_lock: true,
+    auto_lock: true,
+    lock_timeout: "5",
+    cloud_backup: false,
+    hide_on_screenshots: true,
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showDeleteWarning, setShowDeleteWarning] = useState(false);
+
+  // Load settings on mount
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  async function loadSettings() {
+    try {
+      const data = await settingsApi.get('privacy');
+      setSettings(data);
+    } catch (error) {
+      console.error('Failed to load privacy settings:', error);
+      // Keep default values if loading fails
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveSettings(newSettings: PrivacySettingsType) {
+    setSaving(true);
+    try {
+      await settingsApi.updatePrivacy(newSettings);
+      setSettings(newSettings);
+    } catch (error) {
+      console.error('Failed to save privacy settings:', error);
+      // Revert to previous settings on error
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Auto-save handlers
+  const setBiometricLock = (value: boolean) => {
+    const newSettings = { ...settings, biometric_lock: value };
+    setSettings(newSettings);
+    saveSettings(newSettings);
+  };
+
+  const setAutoLock = (value: boolean) => {
+    const newSettings = { ...settings, auto_lock: value };
+    setSettings(newSettings);
+    saveSettings(newSettings);
+  };
+
+  const setLockTimeout = (value: string) => {
+    const newSettings = { ...settings, lock_timeout: value };
+    setSettings(newSettings);
+    saveSettings(newSettings);
+  };
+
+  const setCloudBackup = (value: boolean) => {
+    const newSettings = { ...settings, cloud_backup: value };
+    setSettings(newSettings);
+    saveSettings(newSettings);
+  };
+
+  const setHideOnScreenshots = (value: boolean) => {
+    const newSettings = { ...settings, hide_on_screenshots: value };
+    setSettings(newSettings);
+    saveSettings(newSettings);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full mx-auto mb-4" />
+          <p className="text-muted-foreground/70">Loading settings...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col px-4 md:px-6 pb-24 pt-6 md:pt-8 max-w-3xl mx-auto w-full">
@@ -66,14 +144,15 @@ export default function PrivacySettings() {
                   </p>
                 </div>
                 <button
-                  onClick={() => setBiometricLock(!biometricLock)}
+                  onClick={() => setBiometricLock(!settings.biometric_lock)}
+                  disabled={saving}
                   className={`relative w-14 h-8 rounded-full transition-all duration-300 ${
-                    biometricLock ? "bg-primary/80" : "bg-muted-foreground/20"
-                  }`}
+                    settings.biometric_lock ? "bg-primary/80" : "bg-muted-foreground/20"
+                  } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <div
                     className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 ${
-                      biometricLock ? "left-7" : "left-1"
+                      settings.biometric_lock ? "left-7" : "left-1"
                     }`}
                   />
                 </button>
@@ -90,28 +169,30 @@ export default function PrivacySettings() {
                   </p>
                 </div>
                 <button
-                  onClick={() => setAutoLock(!autoLock)}
+                  onClick={() => setAutoLock(!settings.auto_lock)}
+                  disabled={saving}
                   className={`relative w-14 h-8 rounded-full transition-all duration-300 ${
-                    autoLock ? "bg-primary/80" : "bg-muted-foreground/20"
-                  }`}
+                    settings.auto_lock ? "bg-primary/80" : "bg-muted-foreground/20"
+                  } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <div
                     className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 ${
-                      autoLock ? "left-7" : "left-1"
+                      settings.auto_lock ? "left-7" : "left-1"
                     }`}
                   />
                 </button>
               </div>
               
-              {autoLock && (
+              {settings.auto_lock && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                   <label className="text-sm text-muted-foreground/70 mb-2 block">
                     Lock after
                   </label>
                   <select
-                    value={lockTimeout}
+                    value={settings.lock_timeout}
                     onChange={(e) => setLockTimeout(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-background/50 rounded-[16px] border border-primary/10 focus:border-primary/30 focus:outline-none text-foreground/90 text-sm"
+                    disabled={saving}
+                    className="w-full px-4 py-2.5 bg-background/50 rounded-[16px] border border-primary/10 focus:border-primary/30 focus:outline-none text-foreground/90 text-sm disabled:opacity-50"
                   >
                     <option value="1">1 minute</option>
                     <option value="5">5 minutes</option>
@@ -132,14 +213,15 @@ export default function PrivacySettings() {
                   </p>
                 </div>
                 <button
-                  onClick={() => setHideOnScreenshots(!hideOnScreenshots)}
+                  onClick={() => setHideOnScreenshots(!settings.hide_on_screenshots)}
+                  disabled={saving}
                   className={`relative w-14 h-8 rounded-full transition-all duration-300 ${
-                    hideOnScreenshots ? "bg-primary/80" : "bg-muted-foreground/20"
-                  }`}
+                    settings.hide_on_screenshots ? "bg-primary/80" : "bg-muted-foreground/20"
+                  } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <div
                     className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 ${
-                      hideOnScreenshots ? "left-7" : "left-1"
+                      settings.hide_on_screenshots ? "left-7" : "left-1"
                     }`}
                   />
                 </button>
@@ -165,14 +247,15 @@ export default function PrivacySettings() {
                   </p>
                 </div>
                 <button
-                  onClick={() => setCloudBackup(!cloudBackup)}
+                  onClick={() => setCloudBackup(!settings.cloud_backup)}
+                  disabled={saving}
                   className={`relative w-14 h-8 rounded-full transition-all duration-300 ${
-                    cloudBackup ? "bg-primary/80" : "bg-muted-foreground/20"
-                  }`}
+                    settings.cloud_backup ? "bg-primary/80" : "bg-muted-foreground/20"
+                  } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <div
                     className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 ${
-                      cloudBackup ? "left-7" : "left-1"
+                      settings.cloud_backup ? "left-7" : "left-1"
                     }`}
                   />
                 </button>
@@ -247,10 +330,19 @@ export default function PrivacySettings() {
                       Cancel
                     </button>
                     <button
-                      onClick={() => {
-                        // Handle delete
-                        deleteAllEntries();
-                        setShowDeleteWarning(false);
+                      onClick={async () => {
+                        // Handle delete all entries from API
+                        try {
+                          const entries = await journalApi.getAllEntries();
+                          for (const entry of entries) {
+                            await journalApi.deleteEntry(entry.id);
+                          }
+                          setShowDeleteWarning(false);
+                          alert('All entries deleted successfully');
+                        } catch (error) {
+                          console.error('Failed to delete all entries:', error);
+                          alert('Failed to delete all entries. Please try again.');
+                        }
                       }}
                       className="flex-1 px-4 py-2.5 bg-red-500/20 rounded-[16px] text-sm text-red-500 hover:bg-red-500/30 transition-colors font-medium"
                     >

@@ -2,11 +2,90 @@ import { useState, useEffect } from "react";
 import { ArrowLeft, Sparkles, User, Palette } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getUserSettings, saveUserSettings, UserSettings } from "@/app/utils/userSettings";
+import { settingsApi, type PersonalizationSettings as PersonalizationSettingsType } from "@/services/settingsApi";
 import { JournalMascot } from "@/app/components/JournalMascot";
+import { useMascotColors } from "@/app/contexts/MascotColorsContext";
 
 export default function PersonalizeMascot() {
-  const [settings, setSettings] = useState<UserSettings>(getUserSettings());
+  // Keep local settings for backwards compatibility
+  const localSettings = getUserSettings();
+  const { colors: mascotColors, setColors: setMascotColors } = useMascotColors();
+  
+  const [settings, setSettings] = useState<PersonalizationSettingsType>({
+    username: localSettings.username,
+    mascot_name: localSettings.mascotName,
+    mascot_style: localSettings.mascotStyle,
+    mascot_voice: localSettings.mascotVoice,
+    mascot_primary_color: mascotColors.primary,
+    mascot_secondary_color: mascotColors.secondary,
+    mascot_accent_color: mascotColors.accent,
+    mascot_blush_color: mascotColors.blush,
+  });
+  const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+
+  // Load settings on mount
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  async function loadSettings() {
+    try {
+      const data = await settingsApi.get('personalization');
+      setSettings(data);
+      
+      // Update mascot colors if they exist in backend data
+      if (data.mascot_primary_color) {
+        setMascotColors({
+          primary: data.mascot_primary_color,
+          secondary: data.mascot_secondary_color || mascotColors.secondary,
+          accent: data.mascot_accent_color || mascotColors.accent,
+          blush: data.mascot_blush_color || mascotColors.blush,
+        });
+      }
+      
+      // Sync to local storage for backwards compatibility
+      saveUserSettings({
+        username: data.username,
+        mascotName: data.mascot_name,
+        mascotStyle: data.mascot_style,
+        mascotVoice: data.mascot_voice,
+      });
+    } catch (error) {
+      console.error('Failed to load personalization settings:', error);
+      // Keep default values if loading fails
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSave() {
+    try {
+      // Include current mascot colors in the save
+      const settingsToSave = {
+        ...settings,
+        mascot_primary_color: mascotColors.primary,
+        mascot_secondary_color: mascotColors.secondary,
+        mascot_accent_color: mascotColors.accent,
+        mascot_blush_color: mascotColors.blush,
+      };
+      
+      await settingsApi.updatePersonalization(settingsToSave);
+      
+      // Sync to local storage for backwards compatibility
+      saveUserSettings({
+        username: settings.username,
+        mascotName: settings.mascot_name,
+        mascotStyle: settings.mascot_style,
+        mascotVoice: settings.mascot_voice,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      console.error('Failed to save personalization settings:', error);
+      alert('Failed to save settings. Please try again.');
+    }
+  }
 
   const mascotStyles = [
     { value: 'encouraging', label: 'Encouraging', description: 'Supportive and uplifting' },
@@ -20,11 +99,16 @@ export default function PersonalizeMascot() {
     { value: 'friendly', label: 'Friendly', description: 'Casual and approachable' },
   ] as const;
 
-  const handleSave = () => {
-    saveUserSettings(settings);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full mx-auto mb-4" />
+          <p className="text-muted-foreground/70">Loading settings...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col px-4 md:px-6 pb-24 pt-6 md:pt-8 max-w-3xl mx-auto w-full">
@@ -81,8 +165,8 @@ export default function PersonalizeMascot() {
               </label>
               <input
                 type="text"
-                value={settings.mascotName}
-                onChange={(e) => setSettings({ ...settings, mascotName: e.target.value })}
+                value={settings.mascot_name}
+                onChange={(e) => setSettings({ ...settings, mascot_name: e.target.value })}
                 className="w-full px-4 py-3 bg-background/50 rounded-[16px] border border-primary/10 focus:border-primary/30 focus:outline-none text-foreground/90"
                 placeholder="Give your companion a name"
               />
@@ -97,9 +181,9 @@ export default function PersonalizeMascot() {
                 {mascotStyles.map((style) => (
                   <button
                     key={style.value}
-                    onClick={() => setSettings({ ...settings, mascotStyle: style.value })}
+                    onClick={() => setSettings({ ...settings, mascot_style: style.value })}
                     className={`w-full text-left p-4 rounded-[16px] border transition-all ${
-                      settings.mascotStyle === style.value
+                      settings.mascot_style === style.value
                         ? 'bg-primary/10 border-primary/30 shadow-sm'
                         : 'bg-background/30 border-primary/10 hover:border-primary/20'
                     }`}
@@ -109,7 +193,7 @@ export default function PersonalizeMascot() {
                         <div className="text-foreground/90 font-medium mb-1">{style.label}</div>
                         <div className="text-sm text-muted-foreground/60">{style.description}</div>
                       </div>
-                      {settings.mascotStyle === style.value && (
+                      {settings.mascot_style === style.value && (
                         <div className="w-5 h-5 rounded-full bg-primary/20 border-2 border-primary flex items-center justify-center">
                           <div className="w-2.5 h-2.5 rounded-full bg-primary" />
                         </div>
@@ -129,9 +213,9 @@ export default function PersonalizeMascot() {
                 {mascotVoices.map((voice) => (
                   <button
                     key={voice.value}
-                    onClick={() => setSettings({ ...settings, mascotVoice: voice.value })}
+                    onClick={() => setSettings({ ...settings, mascot_voice: voice.value })}
                     className={`w-full text-left p-4 rounded-[16px] border transition-all ${
-                      settings.mascotVoice === voice.value
+                      settings.mascot_voice === voice.value
                         ? 'bg-primary/10 border-primary/30 shadow-sm'
                         : 'bg-background/30 border-primary/10 hover:border-primary/20'
                     }`}
@@ -141,7 +225,7 @@ export default function PersonalizeMascot() {
                         <div className="text-foreground/90 font-medium mb-1">{voice.label}</div>
                         <div className="text-sm text-muted-foreground/60">{voice.description}</div>
                       </div>
-                      {settings.mascotVoice === voice.value && (
+                      {settings.mascot_voice === voice.value && (
                         <div className="w-5 h-5 rounded-full bg-primary/20 border-2 border-primary flex items-center justify-center">
                           <div className="w-2.5 h-2.5 rounded-full bg-primary" />
                         </div>
@@ -154,13 +238,18 @@ export default function PersonalizeMascot() {
           </div>
         </section>
 
-        {/* Save Button */}
-        <button
-          onClick={handleSave}
-          className="w-full px-6 py-4 bg-gradient-to-r from-primary/20 to-primary/10 hover:from-primary/30 hover:to-primary/20 rounded-[24px] border border-primary/30 text-primary font-medium transition-all hover:scale-[1.02] hover:shadow-lg"
-        >
-          {saved ? '✓ Saved!' : 'Save Changes'}
-        </button>
+        {/* Preview */}
+        <div className="bg-gradient-to-br from-primary/5 to-transparent rounded-[24px] border border-primary/10 p-6">
+          <h3 className="text-foreground/80 font-medium mb-4">Preview</h3>
+          <div className="bg-card/60 backdrop-blur-sm rounded-[20px] p-5 border border-primary/10">
+            <p className="text-foreground/85 leading-relaxed">
+              <span className="font-medium text-primary">{settings.mascot_name}:</span>{' '}
+              {settings.mascot_style === 'encouraging' && `"Hey ${settings.username}! You've got this! 💪 I'm here to support you every step of the way."`}
+              {settings.mascot_style === 'reflective' && `"${settings.username}, let's take a moment to reflect on your thoughts. What's truly on your mind today?"`}
+              {settings.mascot_style === 'playful' && `"Hey ${settings.username}! ✨ What awesome things are happening in your world today?"`}
+            </p>
+          </div>
+        </div>
 
         {/* Mascot Color Customization */}
         <section>
@@ -175,18 +264,13 @@ export default function PersonalizeMascot() {
           </div>
         </section>
 
-        {/* Preview */}
-        <div className="bg-gradient-to-br from-primary/5 to-transparent rounded-[24px] border border-primary/10 p-6">
-          <h3 className="text-foreground/80 font-medium mb-4">Preview</h3>
-          <div className="bg-card/60 backdrop-blur-sm rounded-[20px] p-5 border border-primary/10">
-            <p className="text-foreground/85 leading-relaxed">
-              <span className="font-medium text-primary">{settings.mascotName}:</span>{' '}
-              {settings.mascotStyle === 'encouraging' && `"Hey ${settings.username}! You've got this! 💪 I'm here to support you every step of the way."`}
-              {settings.mascotStyle === 'reflective' && `"${settings.username}, let's take a moment to reflect on your thoughts. What's truly on your mind today?"`}
-              {settings.mascotStyle === 'playful' && `"Hey ${settings.username}! ✨ What awesome things are happening in your world today?"`}
-            </p>
-          </div>
-        </div>
+        {/* Save Button */}
+        <button
+          onClick={handleSave}
+          className="w-full px-6 py-4 bg-gradient-to-r from-primary/20 to-primary/10 hover:from-primary/30 hover:to-primary/20 rounded-[24px] border border-primary/30 text-primary font-medium transition-all hover:scale-[1.02] hover:shadow-lg mb-8"
+        >
+          {saved ? '✓ Saved!' : 'Save Changes'}
+        </button>
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import AllEntries from "@/app/pages/AllEntries";
 import PrivacySettings from "@/app/pages/PrivacySettings";
 import PersonalizeMascot from "@/app/pages/PersonalizeMascot";
 import Navigation from "@/app/components/Navigation";
+import ApiHealthCheck from "@/app/components/ApiHealthCheck";
 import { MascotColorsProvider } from "@/app/contexts/MascotColorsContext";
 
 export default function App() {
@@ -27,6 +28,7 @@ export default function App() {
             <Route path="/all-entries" element={<AllEntries />} />
             <Route path="/privacy-settings" element={<PrivacySettings />} />
             <Route path="/personalize-mascot" element={<PersonalizeMascot />} />
+            <Route path="/api-health" element={<ApiHealthCheck />} />
             <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>

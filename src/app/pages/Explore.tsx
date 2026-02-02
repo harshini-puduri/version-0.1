@@ -2,8 +2,11 @@ import { Heart, Moon, Coffee, Sun, Cloud, Star, ArrowLeft, Send, Mic, MicOff } f
 import { Link, useLocation } from "react-router-dom";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 import { useState, useRef, useEffect } from "react";
+import { getUserSettings } from "@/app/utils/userSettings";
 import { Toast } from "@/app/components/Toast";
 import { JournalMascot } from "@/app/components/JournalMascot";
+import { exploreApi, type ExploreMessage } from "@/api/exploreApi";
+import { transcribeAudioBlob } from "@/services/sttApi";
 
 type Message = {
   id: number;
@@ -12,26 +15,86 @@ type Message = {
   timestamp: Date;
 };
 
+const MODES = [
+  { id: "companion", name: "Companion", description: "Warm, empathetic friend mode", icon: "💝" },
+  { id: "coach", name: "Coach", description: "Growth-focused coaching mode", icon: "🎯" },
+  { id: "analyst", name: "Analyst", description: "Pattern analysis and insights", icon: "🔍" },
+  { id: "explorer", name: "Explorer", description: "Curious, imaginative exploration", icon: "✨" },
+];
+
 export default function Explore() {
+  // Get mascot name from user settings
+  const [companionName, setCompanionName] = useState(() => getUserSettings().mascotName || "Your Guide");
+
+  // Listen for changes to user settings (e.g., after Personalize save)
+  useEffect(() => {
+    function handleStorageChange(e: StorageEvent) {
+      if (e.key === 'user-settings') {
+        setCompanionName(getUserSettings().mascotName || "Your Guide");
+      }
+    }
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
   const location = useLocation();
   const prefilledMessage = (location.state as { prefilledMessage?: string })?.prefilledMessage || "";
   
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      sender: "mascot",
-      text: "Our top goals this week must be:\n\n• Deep breaths for 10 minutes when you feel overwhelmed so it won't drive you crazy.\n\n• If you can't control it, don't waste your energy.\n\n• Get out of the table if someone doesn't respect you.",
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [goalsLoaded, setGoalsLoaded] = useState(false);
+    // Fetch weekly goals on mount
+    useEffect(() => {
+      async function fetchGoals() {
+        try {
+          const response = await fetch('/api/explore/goals/weekly?user_id=default');
+          const goals = await response.json();
+          if (Array.isArray(goals) && goals.length > 0) {
+            const goalsText = 'Our top goals this week must be:\n\n' + goals.map((g, i) => `• ${g.text}`).join('\n\n');
+            setMessages([
+              {
+                id: 1,
+                sender: "mascot",
+                text: goalsText,
+                timestamp: new Date(),
+              },
+            ]);
+          } else {
+            setMessages([
+              {
+                id: 1,
+                sender: "mascot",
+                text: "No goals found for this week.",
+                timestamp: new Date(),
+              },
+            ]);
+          }
+        } catch (error) {
+          setMessages([
+            {
+              id: 1,
+              sender: "mascot",
+              text: "Unable to load weekly goals. Please try again later.",
+              timestamp: new Date(),
+            },
+          ]);
+        } finally {
+          setGoalsLoaded(true);
+        }
+      }
+      fetchGoals();
+    }, []);
   const [inputValue, setInputValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
-  const [recognition, setRecognition] = useState<any>(null);
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
   const [isGoalsExpanded, setIsGoalsExpanded] = useState(true);
   const [showToast, setShowToast] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [conversationHistory, setConversationHistory] = useState<ExploreMessage[]>([]);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [selectedMode, setSelectedMode] = useState<'companion' | 'coach' | 'analyst' | 'explorer'>(MODES[0].id as 'companion');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   // Handle prefilled message from navigation state
   useEffect(() => {
@@ -45,88 +108,70 @@ export default function Explore() {
     }
   }, [prefilledMessage]);
 
-  // Initialize Speech Recognition
-  useEffect(() => {
-    if (typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)) {
-      const SpeechRecognitionAPI =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      const recognitionInstance = new SpeechRecognitionAPI();
-      recognitionInstance.continuous = true;
-      recognitionInstance.interimResults = true;
-      recognitionInstance.lang = "en-US";
-
-      recognitionInstance.onresult = (event: SpeechRecognitionEvent) => {
-        let interimTranscript = "";
-        let finalTranscript = "";
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript + " ";
-          } else {
-            interimTranscript += transcript;
-          }
-        }
-
-        setInputValue((prev) => {
-          const withoutInterim = prev.replace(/\s*\[listening...\]\s*$/, "");
-          if (finalTranscript) {
-            return withoutInterim + finalTranscript;
-          }
-          return withoutInterim + (interimTranscript ? ` [listening...]` : "");
-        });
-      };
-
-      recognitionInstance.onerror = (event: any) => {
-        // Suppress console error for permission denial and aborted (expected behavior)
-        if (event.error !== 'not-allowed' && event.error !== 'aborted') {
-          console.error("Speech recognition error:", event.error);
-        }
-        setIsRecording(false);
-      };
-
-      recognitionInstance.onend = () => {
-        setIsRecording(false);
-        setInputValue((prev) => prev.replace(/\s*\[listening...\]\s*$/, ""));
-      };
-
-      setRecognition(recognitionInstance);
-    }
-  }, []);
-
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSendMessage = () => {
-    if (!inputValue.trim()) return;
+  const handleSendMessage = async () => {
+    if (!inputValue.trim() || isLoading) return;
 
     // Mark that user has interacted
     if (!hasUserInteracted) {
       setHasUserInteracted(true);
     }
 
-    const newMessage: Message = {
+    const userMessage: Message = {
       id: messages.length + 1,
       sender: "user",
       text: inputValue,
       timestamp: new Date(),
     };
 
-    setMessages([...messages, newMessage]);
+    setMessages(prev => [...prev, userMessage]);
     setInputValue("");
+    setIsLoading(true);
 
-    // Mock AI response (can be replaced with real AI integration)
-    setTimeout(() => {
+    try {
+      // Build conversation history for context
+      const history: ExploreMessage[] = [
+        ...conversationHistory,
+        { role: 'user', content: inputValue }
+      ];
+
+      // Call backend API with selected mode
+      const response = await exploreApi.chat(inputValue, history, selectedMode as 'companion' | 'coach' | 'analyst' | 'explorer');
+
       const aiResponse: Message = {
         id: messages.length + 2,
         sender: "mascot",
-        text: "I'm here to listen and support you. How are you feeling about this?",
+        text: response.response,
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, aiResponse]);
-    }, 1000);
+
+      setMessages(prev => [...prev, aiResponse]);
+      setConversationHistory([
+        ...history,
+        { role: 'assistant', content: response.response }
+      ]);
+      
+      // Update suggestions for next week based on conversation context
+      if (response.suggestions && response.suggestions.length > 0) {
+        setSuggestions(response.suggestions);
+      }
+
+    } catch (error) {
+      console.error('Chat error:', error);
+      const errorMessage: Message = {
+        id: messages.length + 2,
+        sender: "mascot",
+        text: "I'm having trouble connecting. Please try again.",
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -136,16 +181,49 @@ export default function Explore() {
     }
   };
 
-  const handleStartRecording = () => {
-    if (recognition) {
-      recognition.start();
+
+  // --- Mic recording and backend STT integration (same as AddEntry) ---
+  const handleStartRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        stream.getTracks().forEach(track => track.stop());
+        if (audioBlob.size === 0) {
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 2000);
+          return;
+        }
+        try {
+          const transcript = await transcribeAudioBlob(audioBlob);
+          setInputValue(prev => prev + transcript);
+        } catch (error) {
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 2000);
+          console.error('Transcription error:', error);
+        }
+      };
+
+      mediaRecorder.start();
       setIsRecording(true);
+    } catch (error) {
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 2000);
+      console.error('Microphone access denied:', error);
     }
   };
 
   const handleStopRecording = () => {
-    if (recognition) {
-      recognition.stop();
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
   };
@@ -163,12 +241,33 @@ export default function Explore() {
         </Link>
       </div>
 
-      {/* Header */}
+      {/* Header & Conversation Style Selector */}
       <div className="text-center mb-8 md:mb-12 space-y-2 md:space-y-3">
-        <h1 className="text-3xl md:text-4xl text-foreground/90">Chat with Your Guide</h1>
+        <h1 className="text-3xl md:text-4xl text-foreground/90">Chat with {companionName}</h1>
         <p className="text-muted-foreground text-base md:text-lg italic">
           Ask anything, share your thoughts
         </p>
+        <div className="mt-4 flex flex-col items-center">
+          <span className="text-sm text-muted-foreground/80 mb-2">Conversation Style:</span>
+          <div className="flex gap-3 flex-wrap justify-center">
+            {MODES.map((mode) => (
+              <button
+                key={mode.id}
+                onClick={() => setSelectedMode(mode.id as 'companion' | 'coach' | 'analyst' | 'explorer')}
+                className={`px-4 py-2 rounded-full border transition-all text-base flex items-center gap-2 font-medium ${
+                  selectedMode === mode.id
+                    ? 'bg-primary/10 border-primary text-primary'
+                    : 'bg-background border-primary/20 text-muted-foreground hover:bg-primary/5 hover:text-primary'
+                }`}
+                type="button"
+                title={mode.description}
+              >
+                <span>{mode.icon}</span>
+                {mode.name}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Chat Container */}
@@ -336,6 +435,32 @@ export default function Explore() {
           )}
         </div>
 
+        {/* Next Week's Suggestions - Clickable */}
+        {suggestions.length > 0 && !isLoading && (
+          <div className="px-4 md:px-8 lg:px-12 pb-4 animate-in fade-in duration-500">
+            <div className="bg-gradient-to-br from-primary/5 to-secondary/5 rounded-2xl p-4 md:p-6 border border-primary/10">
+              <h3 className="text-sm font-medium text-foreground/80 mb-4 flex items-center gap-2">
+                <Star className="w-4 h-4 text-primary/70" />
+                Follow-up suggestions
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {suggestions.map((suggestion, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setInputValue(suggestion);
+                      inputRef.current?.focus();
+                    }}
+                    className="px-4 py-2 bg-card/60 hover:bg-card/80 backdrop-blur-sm rounded-full text-sm text-foreground/80 border border-primary/10 transition-all duration-300 hover:scale-105 hover:shadow-md active:scale-95"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Input Area */}
         <div className="bg-card/70 backdrop-blur-xl p-4 md:p-6 lg:p-8 border-t border-primary/5">
           <div className="flex items-center gap-2 md:gap-4">
@@ -359,10 +484,14 @@ export default function Explore() {
             />
             <button
               onClick={handleSendMessage}
-              disabled={!inputValue.trim()}
+              disabled={!inputValue.trim() || isLoading}
               className="flex-shrink-0 h-[48px] w-[48px] md:h-[56px] md:w-[56px] flex items-center justify-center bg-gradient-to-br from-primary/15 to-primary/10 hover:from-primary/25 hover:to-primary/15 rounded-full transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl disabled:hover:scale-100"
             >
-              <Send className="w-4 h-4 md:w-5 md:h-5 text-primary/80" />
+              {isLoading ? (
+                <div className="w-4 h-4 border-2 border-primary/30 border-t-primary/80 rounded-full animate-spin" />
+              ) : (
+                <Send className="w-4 h-4 md:w-5 md:h-5 text-primary/80" />
+              )}
             </button>
             <button
               onClick={isRecording ? handleStopRecording : handleStartRecording}
